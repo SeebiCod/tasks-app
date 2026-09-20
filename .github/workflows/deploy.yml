@@ -7,7 +7,6 @@ on:
 
 env:
   REGISTRY: ghcr.io
-  IMAGE_OWNER: ${{ github.repository_owner }}
 
 jobs:
   build-and-push:
@@ -17,12 +16,15 @@ jobs:
       packages: write
     outputs:
       image_tag: ${{ steps.meta.outputs.tag }}
+      image_owner: ${{ steps.meta.outputs.owner }}
     steps:
       - uses: actions/checkout@v4
 
-      - name: Set image tag
+      - name: Set image tag and lowercase owner
         id: meta
-        run: echo "tag=${GITHUB_SHA::7}" >> $GITHUB_OUTPUT
+        run: |
+          echo "tag=${GITHUB_SHA::7}" >> $GITHUB_OUTPUT
+          echo "owner=${GITHUB_REPOSITORY_OWNER,,}" >> $GITHUB_OUTPUT
 
       - name: Log in to GHCR
         uses: docker/login-action@v3
@@ -40,8 +42,8 @@ jobs:
           context: ./backend
           push: true
           tags: |
-            ${{ env.REGISTRY }}/${{ env.IMAGE_OWNER }}/tasks-backend:latest
-            ${{ env.REGISTRY }}/${{ env.IMAGE_OWNER }}/tasks-backend:${{ steps.meta.outputs.tag }}
+            ${{ env.REGISTRY }}/${{ steps.meta.outputs.owner }}/tasks-backend:latest
+            ${{ env.REGISTRY }}/${{ steps.meta.outputs.owner }}/tasks-backend:${{ steps.meta.outputs.tag }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
@@ -53,8 +55,8 @@ jobs:
           build-args: |
             VITE_API_URL=${{ secrets.VITE_API_URL }}
           tags: |
-            ${{ env.REGISTRY }}/${{ env.IMAGE_OWNER }}/tasks-frontend:latest
-            ${{ env.REGISTRY }}/${{ env.IMAGE_OWNER }}/tasks-frontend:${{ steps.meta.outputs.tag }}
+            ${{ env.REGISTRY }}/${{ steps.meta.outputs.owner }}/tasks-frontend:latest
+            ${{ env.REGISTRY }}/${{ steps.meta.outputs.owner }}/tasks-frontend:${{ steps.meta.outputs.tag }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
@@ -84,7 +86,7 @@ jobs:
             set -e
             cd /home/${{ secrets.EC2_USER }}/tasks-app
             echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
-            export IMAGE_OWNER=${{ github.repository_owner }}
+            export IMAGE_OWNER=${{ needs.build-and-push.outputs.image_owner }}
             export IMAGE_TAG=${{ needs.build-and-push.outputs.image_tag }}
             export DB_PASSWORD='${{ secrets.DB_PASSWORD }}'
             docker compose -f docker-compose.prod.yml pull
